@@ -5,22 +5,23 @@ import { Telegram } from "./src/core/telegram.js";
 import { Helper } from "./src/utils/helper.js";
 import logger from "./src/utils/logger.js";
 import { CronJob } from "./src/bot/cron.js";
+import input from "input";
+import { ACCOUNT_CONFIG, setAccountConfig } from "./src/config/global.js";
 
 let init = false;
 async function startBot() {
   return new Promise(async (resolve, reject) => {
     try {
       logger.info(`BOT STARTED`);
-      if (
-        Config.TELEGRAM_APP_ID == undefined ||
-        Config.TELEGRAM_APP_HASH == undefined
-      ) {
-        throw new Error(
-          "Please configure your TELEGRAM_APP_ID and TELEGRAM_APP_HASH first"
-        );
+
+      if (Config.ACCOUNTS.length == 0) {
+        throw new Error("Please configure your ACCOUNTS first");
       }
 
+      
       const tele = await new Telegram();
+
+      await tele.onBeforeBoarding()
 
       if (init == false) {
         await tele.init();
@@ -28,8 +29,10 @@ async function startBot() {
       }
 
       const sessionList = Helper.getSession("sessions");
+
       const paramList = [];
 
+      //? USING PROXY
       if (proxyList.length > 0) {
         if (sessionList.length != proxyList.length) {
           reject(
@@ -38,27 +41,35 @@ async function startBot() {
         }
       }
 
-      for (const acc of sessionList) {
-        const accIdx = sessionList.indexOf(acc);
-        const proxy = proxyList.length > 0 ? proxyList[accIdx] : undefined;
+      const sessionName = `${ACCOUNT_CONFIG.TELEGRAM_NAME} - (${ACCOUNT_CONFIG.TELEGRAM_APP_ID})`
 
-        await tele.useSession("sessions/" + acc, proxy);
-        tele.session = acc;
-        const user = await tele.client.getMe();
+      const sessionIdx = sessionList.findIndex((item) => item == sessionName);
 
-        const query = await tele
-          .resolvePeer()
-          .then(async () => {
-            return await tele.initWebView();
-          })
-          .catch((err) => {
-            throw err;
-          });
-
-        const queryObj = Helper.queryToJSON(query);
-        await tele.disconnect();
-        paramList.push([user, query, queryObj, proxy]);
+      if (sessionIdx == -1) {
+        reject(`Session ${sessionName} - Not Found`);
+        console.info("Your Session not found, please create first");
+        await tele.onBoarding();
       }
+
+      const acc = sessionList[sessionIdx];
+
+      const proxy = proxyList.length > 0 ? proxyList[sessionIdx] : undefined;
+
+      await tele.useSession("sessions/" + acc, proxy);
+      tele.session = acc;
+      const user = await tele.client.getMe();
+      const query = await tele
+        .resolvePeer()
+        .then(async () => {
+          return await tele.initWebView();
+        })
+        .catch((err) => {
+          throw err;
+        });
+      
+      const queryObj = Helper.queryToJSON(query);
+      await tele.disconnect();
+      paramList.push([user, query, queryObj, proxy]);
 
       const promiseList = paramList.map(async (data) => {
         const account = data[0];

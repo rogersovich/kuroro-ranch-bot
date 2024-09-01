@@ -24,6 +24,7 @@ class Twist {
     const user = kuroro.user ?? {};
     const energy = user.energy ?? 0;
     const crystal = user.shards ?? 0;
+    const lastName = `${kuroro.lastTask?.name ?? ""}`;
 
     //     const farm = balance.farming
     //       ? `${Helper.readTime(balance.farming.startTime)} - ${Helper.readTime(
@@ -58,7 +59,7 @@ class Twist {
     this.twisters.put(acc.id, {
       text: `
       ================= Account ${acc.id} =============
-      Name      : ${acc.firstName} ${acc.lastName}
+      Name      : ${acc.firstName} ${lastName}
       Energy    : ${energy}
       Crystal   : ${crystal}
 

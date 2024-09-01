@@ -1,10 +1,13 @@
-import input from "input";
+
+import "colors";
 import { Helper } from "../utils/helper.js";
-import { Config } from "../config/config.js";
+import input from "input";
 import { Api, TelegramClient } from "telegram";
 import { StoreSession } from "telegram/sessions/StoreSession.js";
 import logger from "../utils/logger.js";
 import { HttpsProxyAgent } from "https-proxy-agent";
+import { ACCOUNT_CONFIG, setAccountConfig } from "../config/global.js";
+import { Config } from "../config/config.js";
 
 export class Telegram {
   storeSession;
@@ -18,21 +21,26 @@ export class Telegram {
     try {
       await this.onBoarding();
     } catch (error) {
-      console.log(error);
       logger.error(`${JSON.stringify(error)}`);
       throw error;
     }
   }
   async onBoarding() {
     try {
+
+      console.log()
+
       const choice = await input.text(
-        "Welcome to Kuroro Ranch Bot \nBy : John doe \n \nLets getting started. \n1. Create Session. \n2. Reset Sessions \n3. Start Bot \n \nInput your choice :"
+        `Welcome to Kuroro Ranch Bot.
+        \n${'By : Rogersovich'.yellow} \n${'Account: '.yellow} ${ACCOUNT_CONFIG.TELEGRAM_NAME.yellow}
+        \nLets getting started. \n${'1.'.yellow} Create Session. \n${'2.'.yellow} Reset Sessions \n${'3.'.yellow} Start Bot \n \nInput your choice :`
       );
+
       if (choice == 1) {
         await this.sessionCreation();
       } else if (choice == 2) {
         Helper.resetSession(this.sessionName);
-        await this.onBoarding();
+        await this.onBeforeBoarding();
       } else if (choice == 3) {
         if (Helper.getSession(this.sessionName)?.length == 0) {
           console.info("You don't have any sessions, please create first");
@@ -46,6 +54,35 @@ export class Telegram {
       throw error;
     }
   }
+
+  async onBeforeBoarding() {
+    try {
+
+      let accountChoices = "Choose your Accounts\n \n";
+      for (let i = 0; i < Config.ACCOUNTS.length; i++) {
+        const acc = Config.ACCOUNTS[i];
+        accountChoices += `${i + 1}. ${acc.TELEGRAM_NAME} (${acc.TELEGRAM_APP_ID})\n`;
+      }
+      accountChoices += "\n \nInput your choice:";
+
+      const choice = await input.text(accountChoices);
+
+      setAccountConfig(Config.ACCOUNTS[choice - 1]);
+
+      if (
+        ACCOUNT_CONFIG.TELEGRAM_APP_ID == undefined ||
+        ACCOUNT_CONFIG.TELEGRAM_APP_HASH == undefined
+      ) {
+        throw new Error(
+          "Please configure your TELEGRAM_APP_ID and TELEGRAM_APP_HASH first"
+        );
+      }
+
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async sessionCreation() {
     try {
       const sessionList = Helper.getSession("sessions");
@@ -54,22 +91,29 @@ export class Telegram {
       for (const sess of sessionList) {
         ctx += `${sessionList.indexOf(sess) + 1}. ${sess}\n`;
       }
-      if (sessionList.length == 0) {
-        ctx += "<empty> \n \nPlease enter Session Name :";
-      } else {
-        ctx +=
-          "\n \nYou alreay have sessions, cancel(CTRL+C) or create new Session :";
+
+      console.log(ctx)
+
+      const sessionName = `${ACCOUNT_CONFIG.TELEGRAM_NAME} - (${ACCOUNT_CONFIG.TELEGRAM_APP_ID})`
+
+      const findSession = sessionList.find((item) => item == sessionName);
+      if (!findSession) {
+        this.sessionName = Helper.createDir(sessionName);
+        logger.info(`New Session Created - ${sessionName}`);
+        await this.useSession("sessions/" + sessionName);
+        await this.disconnect();
+        logger.info(`Session ${sessionName} - Created`);
+        this.storeSession.save();
+        await Helper.delay(2000);
+        logger.info(`Stopping the application...`);
+        process.exit(0);
+      }else{
+        logger.info(`Session ${sessionName} - Already Created`);
+        this.sessionName = sessionName;
+        await Helper.delay(2000);
+        await this.init();
       }
 
-      const newSession = await input.text(ctx);
-      this.sessionName = Helper.createDir(newSession);
-      await this.useSession("sessions/" + newSession);
-      await this.disconnect();
-      logger.info(`Session ${newSession} - Created`);
-      console.log(`Session ${newSession} - Created`);
-      this.storeSession.save();
-      await Helper.delay(2000);
-      await this.init();
     } catch (error) {
       throw error;
     }
@@ -89,8 +133,8 @@ export class Telegram {
       this.storeSession = new StoreSession(sessionName);
       this.client = new TelegramClient(
         this.storeSession,
-        Config.TELEGRAM_APP_ID,
-        Config.TELEGRAM_APP_HASH,
+        ACCOUNT_CONFIG.TELEGRAM_APP_ID,
+        ACCOUNT_CONFIG.TELEGRAM_APP_HASH,
         clientOptions
       );
       this.storeSession.save();
